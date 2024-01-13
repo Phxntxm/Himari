@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
+
 import pytz
 import sqlalchemy as sa
 
@@ -18,20 +19,24 @@ def sleep_amount(timestamp: int) -> int:
     return sleep_time
 
 
-async def handle_daily(id: int, timestamp: int, creator_id: int):
+async def handle_daily(
+    id: int, timestamp: int, creator_id: int, handler: "DailyHandler"
+):
     amt = sleep_amount(timestamp)
     amt = max(0, amt)
 
     await asyncio.sleep(amt)
     await bot.wait_until_ready()
 
-    view = DailyView(creator_id)
+    view = DailyView(creator_id, handler)
     user = bot.get_user(creator_id)
 
     if user is None:
         with Session.begin() as db:
             db.execute(sa.delete(Daily).where(Daily.id == id))
         return
+
+    message = f"Daily reminder!"
 
     with Session.begin() as db:
         daily = db.get(Daily, id)
@@ -40,11 +45,12 @@ async def handle_daily(id: int, timestamp: int, creator_id: int):
             daily.timestamp = int(datetime.now().timestamp()) + 300
             db.add(daily)
 
-    await user.send(
-        "Daily reminder! Press Done once you have completed your daily tasks, and are ready to be notified again in 24 hours.\n"
-        "If you wish to cancel your daily counter, press Cancel.",
-        view=view,
-    )
+        message = f"""Daily reminder! {daily.message if daily is not None else ""}
+
+Press Done once you have completed your daily tasks, and are ready to be notified again in 24 hours.
+If you wish to cancel your daily counter, press Cancel."""
+
+    await user.send(message, view=view)
 
 
 class DailyHandler:
@@ -73,5 +79,10 @@ class DailyHandler:
                 #  otherwise if it's done, it's time to reschedule
                 if task is None or task.done():
                     self._scheduled[daily.creator_id] = loop.create_task(
-                        handle_daily(daily.id, daily.timestamp, daily.creator_id)
+                        handle_daily(daily.id, daily.timestamp, daily.creator_id, self)
                     )
+
+    def cancel(self):
+        for task in self._scheduled.values():
+            task.cancel()
+        self._scheduled.clear()

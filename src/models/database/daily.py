@@ -9,3 +9,4 @@ class Daily(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     creator_id: Mapped[int] = mapped_column(index=True, nullable=False)
     timestamp: Mapped[int] = mapped_column(nullable=False)
+    message: Mapped[str | None] = mapped_column(nullable=True)

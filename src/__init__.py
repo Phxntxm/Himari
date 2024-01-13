@@ -12,5 +12,3 @@ Session = sessionmaker(bind=engine, autoflush=True)
 
 # Ordering matters here due to circular imports
 from .bot import bot as bot
-from . import commands as commands
-from . import tasks as tasks

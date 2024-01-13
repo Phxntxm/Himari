@@ -1,12 +1,13 @@
 import random
-from datetime import datetime, timedelta
 import string
+from datetime import datetime, timedelta
 
 import discord
 import pytz
 import sqlalchemy as sa
+from discord.ext import commands
 
-from src import Session, bot
+from src import Session
 from src.models.database import Failure, Success, Weekly
 
 
@@ -50,12 +51,6 @@ def get_next_timestamp(timestamp: int) -> tuple[int, bool]:
 weekly = discord.app_commands.Group(
     name="weekly", guild_only=True, description="Handles weekly countdowns."
 )
-
-
-@bot.tree.command(description="Get the website to get a timestamp.")
-async def timestamp(interaction: discord.Interaction) -> None:
-    """Get the website to get a timestamp."""
-    await interaction.response.send_message("https://www.timestamp-converter.com/")
 
 
 @weekly.command(description="Create a weekly countdown.")
@@ -524,4 +519,5 @@ async def weeklylist(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(embed=embed)
 
 
-bot.tree.add_command(weekly)
+async def setup(bot: commands.Bot) -> None:
+    bot.tree.add_command(weekly)

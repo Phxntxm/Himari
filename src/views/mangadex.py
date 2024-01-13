@@ -117,7 +117,7 @@ class MangaNotification(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label=manga.title[:90],
-                value=manga.id,
+                value=str(manga.id),
                 default=follower,
             )
             for manga, follower in _mangas.items()

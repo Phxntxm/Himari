@@ -1,21 +1,26 @@
 from __future__ import annotations
-from typing import cast
 
 from datetime import datetime
+from typing import TYPE_CHECKING, cast
+
 import discord
 import sqlalchemy as sa
 
-from src import Session, bot
+from src import Session
 from src.models.database import Daily
+
+if TYPE_CHECKING:
+    from src.utils.daily import DailyHandler
 
 
 class DailyDone(discord.ui.Button):
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, handler: DailyHandler):
         super().__init__(
             style=discord.ButtonStyle.primary,
             label="Done",
             custom_id=f"daily:green:{user_id}",
         )
+        self.handler = handler
 
     async def callback(self, interaction: discord.Interaction):
         with Session.begin() as db:
@@ -36,16 +41,17 @@ class DailyDone(discord.ui.Button):
         )
 
         cast(DailyView, self.view).stop()
-        bot._daily_handler.schedule()
+        self.handler.schedule()
 
 
 class DailyCancel(discord.ui.Button):
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, handler: DailyHandler):
         super().__init__(
             style=discord.ButtonStyle.danger,
             label="Cancel",
             custom_id=f"daily:red:{user_id}",
         )
+        self.handler = handler
 
     async def callback(self, interaction: discord.Interaction):
         with Session.begin() as db:
@@ -56,11 +62,11 @@ class DailyCancel(discord.ui.Button):
         )
 
         cast(DailyView, self.view).stop()
-        bot._daily_handler.schedule()
+        self.handler.schedule()
 
 
 class DailyView(discord.ui.View):
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, handler: DailyHandler):
         super().__init__(timeout=None)
-        self.add_item(DailyDone(user_id))
-        self.add_item(DailyCancel(user_id))
+        self.add_item(DailyDone(user_id, handler=handler))
+        self.add_item(DailyCancel(user_id, handler=handler))
