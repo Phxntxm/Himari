@@ -1,6 +1,11 @@
-from sqlalchemy.orm import Mapped, mapped_column
+import typing
+
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.database import Base
+
+if typing.TYPE_CHECKING:
+    from src.models.database.nyaa_follower import NyaaFollower
 
 
 class Nyaa(Base):
@@ -13,3 +18,7 @@ class Nyaa(Base):
     channel_id: Mapped[int] = mapped_column(nullable=False)
     guild_id: Mapped[int] = mapped_column(nullable=False)
     creator_id: Mapped[int] = mapped_column(nullable=False)
+
+    followers: Mapped[list["NyaaFollower"]] = relationship(
+        "NyaaFollower", back_populates="seed"
+    )

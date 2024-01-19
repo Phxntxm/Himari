@@ -15,5 +15,6 @@ from .j_novel import JNovel as JNovel
 from .manga import Manga as Manga
 from .manga_followers import MangaFollower as MangaFollower
 from .nyaa import Nyaa as Nyaa
+from .nyaa_follower import NyaaFollower as NyaaFollower
 from .success import Success as Success
 from .daily import Daily as Daily

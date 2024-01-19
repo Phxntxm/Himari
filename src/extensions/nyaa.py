@@ -10,11 +10,14 @@ from src import Session
 from src.models.database import Nyaa
 from src.utils import search
 from src.utils.nyaa import magnet
+from src.views.nyaa import NyaaNotificationView
 
 URL = "https://nyaa.si/?page=rss"
 
 
-async def generate_embed(entry) -> discord.Embed:
+async def generate_embed(
+    entry: feedparser.FeedParserDict, given_title: str
+) -> discord.Embed:
     """
     Generates a discord embed for a nyaa torrent.
     """
@@ -24,15 +27,17 @@ async def generate_embed(entry) -> discord.Embed:
     category = entry.nyaa_category
     size = entry.nyaa_size
     torrent_link = entry.link
-    magnet_link = await magnet(title, hash)
+    magnet_link = await magnet(str(title), str(hash))
 
     embed = discord.Embed(
         title=title,
         url=url,
         description=f"""
 [Download Torrent]({torrent_link})
-Magnet Link (Copy paste): {magnet_link}
+Magnet Link (Copy paste):
+{magnet_link}
 
+**Name:** {given_title}
 **Category:** {category}
 **Size:** {size}
 """,
@@ -211,6 +216,56 @@ class NyaaCog(
                 f"RSS feeds (**name**: `match`):\n{msg}"
             )
 
+    @discord.app_commands.command(
+        description="Get notifications when a new seed matching a regex is posted."
+    )
+    async def notifications(self, interaction: discord.Interaction):
+        if interaction.guild is None or interaction.channel is None:
+            await interaction.response.send_message(
+                "This command must be used in a server."
+            )
+            return
+
+        with Session(expire_on_commit=False) as db:
+            mangas = db.query(Nyaa).filter(Nyaa.guild_id == interaction.guild.id).all()
+
+            view = NyaaNotificationView(mangas, interaction.user.id)
+
+        await interaction.response.send_message(
+            f"Select the seeds you want to get notifications for. Page {view.page}/{view.last_page}",
+            ephemeral=True,
+            view=view,
+        )
+
+    async def post(
+        self, nyaa: Nyaa, channel: discord.TextChannel, entry: feedparser.FeedParserDict
+    ):
+        embed = await generate_embed(entry, nyaa.name)
+        role = discord.utils.get(channel.guild.roles, name="Nyaa Seed Updates")
+
+        if role is None:
+            role = await channel.guild.create_role(name="Nyaa Seed Updates")
+
+        for member in role.members:
+            assert self.bot.user is not None
+
+            if member.id == self.bot.user.id:
+                continue
+
+            await member.remove_roles(role)
+
+        for follower in nyaa.followers:
+            member = channel.guild.get_member(follower.user_id)
+
+            if member is None:
+                continue
+
+            await member.add_roles(role)
+
+        await channel.send(
+            f"{role.mention} New seed has been posted for {nyaa.name}", embed=embed
+        )
+
     @tasks.loop(seconds=5)
     async def nyaa(self):
         await self.bot.wait_until_ready()
@@ -244,8 +299,7 @@ class NyaaCog(
                 for entry in reversed(
                     get_latest(data, nyaa_match.match, nyaa_match.latest)
                 ):
-                    embed = await generate_embed(entry)
-                    await channel.send(embed=embed)
+                    await self.post(nyaa_match, channel, entry)
 
                 if entry is not None:
                     nyaa_match.latest = cast(str, entry.id)

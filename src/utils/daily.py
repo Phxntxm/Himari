@@ -36,8 +36,6 @@ async def handle_daily(
             db.execute(sa.delete(Daily).where(Daily.id == id))
         return
 
-    message = f"Daily reminder!"
-
     with Session.begin() as db:
         daily = db.get(Daily, id)
 
@@ -51,6 +49,7 @@ Press Done once you have completed your daily tasks, and are ready to be notifie
 If you wish to cancel your daily counter, press Cancel."""
 
     await user.send(message, view=view)
+    handler.schedule()
 
 
 class DailyHandler:

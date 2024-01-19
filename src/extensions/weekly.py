@@ -14,38 +14,27 @@ from src.models.database import Failure, Success, Weekly
 def get_next_timestamp(timestamp: int) -> tuple[int, bool]:
     tz = pytz.timezone("America/New_York")
     dt = datetime.fromtimestamp(timestamp, tz=tz)
-    now = datetime.now(tz=tz)
+    today = datetime.now(tz=tz).replace(hour=dt.hour, minute=dt.minute, second=0)
 
-    def _get_next_dt() -> datetime:
-        """Get the next datetime for the countdown."""
-        next_dt = now.replace(hour=dt.hour, minute=dt.minute, second=0)
-        # Add a single day just in case this is the same day
+    # The only case that we DON'T want to find the next timestamp that matches the
+    #  day of the week is if it's on the same day, within 3 hours after the time
+    if today.weekday() == dt.weekday() and today.hour < dt.hour + 3:
+        return int(today.timestamp()), True
+
+    # Now get the next date that matches the day of the week
+    #  on the hour/minute that the timestamp is. Do this in a
+    #  "do while" loop, in case we're already on the day of the week
+    #  and it's just after that 3 hour grace period we give
+    next_dt = today + timedelta(days=1)
+
+    # Add a day until it's the weekday we want
+    while next_dt.weekday() != dt.weekday():
         next_dt += timedelta(days=1)
 
-        # Add a day until it's the weekday we want
-        while next_dt.weekday() != dt.weekday():
-            next_dt += timedelta(days=1)
+    # Another replace, in case we've swapped into/out of DST
+    next_dt = next_dt.replace(hour=dt.hour, minute=dt.minute, second=0)
 
-        # Another replace, in case we've swapped into/out of DST
-        return next_dt.replace(hour=dt.hour, minute=dt.minute, second=0)
-
-    # If it's on the day, then we show the success gif no matter what
-    if now.weekday() == dt.weekday():
-        on_day = True
-
-        # Lets do within 3 hours
-        if now.hour > dt.hour + 3:
-            next_dt = _get_next_dt()
-        # If it's within the three hours, then we want to show the time today
-        else:
-            next_dt = now.replace(hour=dt.hour, minute=dt.minute, second=0)
-    # Otherwise, add a day for each day until the day of the week, then set the time
-    else:
-        on_day = False
-
-        next_dt = _get_next_dt()
-
-    return int(next_dt.timestamp()), on_day
+    return int(next_dt.timestamp()), today.weekday() == dt.weekday()
 
 
 weekly = discord.app_commands.Group(
