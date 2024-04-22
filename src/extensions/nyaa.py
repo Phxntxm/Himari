@@ -184,6 +184,8 @@ class NyaaCog(
                 )
                 return
 
+            for follower in rss.followers:
+                session.delete(follower)
             session.delete(rss)
 
         await interaction.response.send_message(f"Removed RSS feed `{name}`")

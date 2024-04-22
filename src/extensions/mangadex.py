@@ -245,14 +245,12 @@ class MangaDexCog(
                     guild = self.bot.get_guild(manga.guild_id)
 
                     if guild is None:
-                        db.delete(manga)
                         continue
 
                     # Then the channel
                     channel = guild.get_channel(manga.channel_id)
 
                     if channel is None or not isinstance(channel, discord.TextChannel):
-                        db.delete(manga)
                         continue
 
                     # Now, if we couldn't find the manga for whatever reason (network issues)
