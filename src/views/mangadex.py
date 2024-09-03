@@ -3,6 +3,7 @@ from __future__ import annotations
 import typing
 
 import discord
+import sqlalchemy as sa
 
 from src import Session
 from src.models.database import Manga, MangaFollower
@@ -36,7 +37,9 @@ class MangaSelection(discord.ui.Select):
         assert manga is not None
 
         with Session.begin() as db:
-            db_manga = db.get(Manga, manga.id)
+            db_manga = db.execute(
+                sa.select(Manga).filter(Manga.mangadex_id == manga.id)
+            ).scalar_one_or_none()
 
             if db_manga is not None:
                 await interaction.response.send_message(
@@ -57,7 +60,7 @@ class MangaSelection(discord.ui.Select):
 
         await interaction.response.defer()
 
-        # Always should but typing doesn't know that
+        # Always should be a discord.Message type but typing doesn't know that
         await interaction.followup.edit_message(
             typing.cast(discord.Message, interaction.message).id,
             content=f"Added {manga.title} to the manga list.",

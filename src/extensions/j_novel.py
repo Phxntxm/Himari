@@ -1,3 +1,4 @@
+import traceback
 from typing import AsyncGenerator, cast
 
 import aiohttp
@@ -117,40 +118,44 @@ class JNovelCog(
     async def j_novel(self):
         await self.bot.wait_until_ready()
 
-        with Session.begin() as db:
-            feeds = db.execute(sa.select(JNovel)).scalars().all()
+        try:
+            with Session.begin() as db:
+                feeds = db.execute(sa.select(JNovel)).scalars().all()
 
-            for feed in feeds:
-                guild = self.bot.get_guild(feed.guild_id)
-                if guild is None:
-                    break
-                channel = guild.get_channel(feed.channel_id)
-                if channel is None:
-                    break
-                if not isinstance(channel, discord.TextChannel):
-                    break
+                for feed in feeds:
+                    guild = self.bot.get_guild(feed.guild_id)
+                    if guild is None:
+                        break
+                    channel = guild.get_channel(feed.channel_id)
+                    if channel is None:
+                        break
+                    if not isinstance(channel, discord.TextChannel):
+                        break
 
-                results = [r async for r in get_latest(feed.series, feed.latest)]
-                entry = None
+                    results = [r async for r in get_latest(feed.series, feed.latest)]
+                    entry = None
 
-                for entry in reversed(results):
-                    embed = discord.Embed(
-                        title=entry.title,
-                        url=entry.link,
-                        color=discord.Color.blurple(),
-                    )
+                    for entry in reversed(results):
+                        embed = discord.Embed(
+                            title=entry.title,
+                            url=entry.link,
+                            color=discord.Color.blurple(),
+                        )
 
-                    cover = next(
-                        filter(lambda link: link.rel == "enclosure", entry.links), None
-                    )
+                        cover = next(
+                            filter(lambda link: link.rel == "enclosure", entry.links),
+                            None,
+                        )
 
-                    if cover:
-                        embed.set_image(url=cover.href)
+                        if cover:
+                            embed.set_image(url=cover.href)
 
-                    await channel.send(embed=embed)
+                        await channel.send(embed=embed)
 
-                if entry is not None:
-                    feed.latest = cast(str, entry.id)
+                    if entry is not None:
+                        feed.latest = cast(str, entry.id)
+        except Exception:
+            traceback.print_exc()
 
 
 async def setup(bot: commands.Bot):

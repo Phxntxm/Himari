@@ -1,6 +1,5 @@
 import io
 import json
-import traceback
 from typing import TypedDict
 
 import aiohttp
@@ -53,7 +52,7 @@ class MangaDexCog(
         """
         if interaction.guild is None or interaction.channel is None:
             await interaction.response.send_message(
-                "This command must be used in a server."
+                "This command must be used in a server.", ephemeral=True
             )
             return
 
@@ -69,7 +68,9 @@ class MangaDexCog(
             _manga = mangas[0]
 
             with Session.begin() as db:
-                db_manga = db.get(Manga, _manga.id)
+                db_manga = db.execute(
+                    sa.select(Manga).filter(Manga.mangadex_id == _manga.id)
+                ).scalar_one_or_none()
 
                 if db_manga is not None:
                     await interaction.response.send_message(
@@ -91,7 +92,6 @@ class MangaDexCog(
             await interaction.response.send_message(
                 f"Added {_manga.title} to the manga list.", ephemeral=True
             )
-
         else:
             view = MangaSearch(mangas, interaction.user.id, channel)
 
@@ -223,8 +223,6 @@ class MangaDexCog(
                 try:
                     latest = await latest_chapter(row.mangadex_id)
                 except Exception:
-                    traceback.print_exc()
-
                     # If we error 5 times in a row, just stop
                     errors += 1
                     if errors >= 5:
@@ -267,7 +265,7 @@ class MangaDexCog(
                     try:
                         await self.post(manga, latest)
                     except Exception:
-                        traceback.print_exc()
+                        pass
                     else:
                         manga.latest_chapter_id = latest.id
 

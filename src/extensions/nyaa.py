@@ -1,3 +1,4 @@
+import traceback
 from typing import cast
 
 import aiohttp
@@ -272,39 +273,42 @@ class NyaaCog(
     async def nyaa(self):
         await self.bot.wait_until_ready()
 
-        with Session.begin() as db:
-            feeds = db.execute(sa.select(Nyaa)).scalars().all()
+        try:
+            with Session.begin() as db:
+                feeds = db.execute(sa.select(Nyaa)).scalars().all()
 
-            async with aiohttp.ClientSession() as session:
-                # Get the RSS feed data
-                async with session.get(URL) as resp:
-                    if resp.status > 299:
-                        return
+                async with aiohttp.ClientSession() as session:
+                    # Get the RSS feed data
+                    async with session.get(URL) as resp:
+                        if resp.status > 299:
+                            return
 
-                    # Pass to feedparser
-                    data = feedparser.parse(await resp.text())
+                        # Pass to feedparser
+                        data = feedparser.parse(await resp.text())
 
-            # Go through each RSS feed
-            for nyaa_match in feeds:
-                # Make sure the channel exists we want to send to
-                guild = self.bot.get_guild(nyaa_match.guild_id)
-                if guild is None:
-                    continue
-                channel = guild.get_channel(nyaa_match.channel_id)
-                if channel is None:
-                    continue
-                if not isinstance(channel, discord.TextChannel):
-                    continue
+                # Go through each RSS feed
+                for nyaa_match in feeds:
+                    # Make sure the channel exists we want to send to
+                    guild = self.bot.get_guild(nyaa_match.guild_id)
+                    if guild is None:
+                        continue
+                    channel = guild.get_channel(nyaa_match.channel_id)
+                    if channel is None:
+                        continue
+                    if not isinstance(channel, discord.TextChannel):
+                        continue
 
-                entry = None
+                    entry = None
 
-                for entry in reversed(
-                    get_latest(data, nyaa_match.match, nyaa_match.latest)
-                ):
-                    await self.post(nyaa_match, channel, entry)
+                    for entry in reversed(
+                        get_latest(data, nyaa_match.match, nyaa_match.latest)
+                    ):
+                        await self.post(nyaa_match, channel, entry)
 
-                if entry is not None:
-                    nyaa_match.latest = cast(str, entry.id)
+                    if entry is not None:
+                        nyaa_match.latest = cast(str, entry.id)
+        except Exception:
+            traceback.print_exc()
 
 
 async def setup(bot: commands.Bot) -> None:
