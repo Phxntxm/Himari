@@ -9,6 +9,7 @@ pytz = "*"
 sqlalchemy = "*"
 feedparser = "*"
 requests = "*"
+psycopg2 = "*"
 
 [dev-packages]
 alembic = "*"

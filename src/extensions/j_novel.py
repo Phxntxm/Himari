@@ -1,5 +1,5 @@
-import traceback
-from typing import AsyncGenerator, cast
+import logging
+from typing import AsyncGenerator, Union, cast
 
 import aiohttp
 import discord
@@ -9,15 +9,17 @@ from discord.ext import commands, tasks
 
 from src import Session
 from src.models.database import JNovel
+from src.utils import get_channel
 from src.utils.j_novel import search_series
 from src.views.j_novel import JNovelSearch
 
 BASE = "https://labs.j-novel.club/feed/series/{}.rss"
 
 
-async def get_latest(
-    series: str, latest: str | None
-) -> AsyncGenerator[feedparser.FeedParserDict, None]:
+logger = logging.getLogger(__name__)
+
+
+async def get_latest(series: str, latest: str | None) -> AsyncGenerator[feedparser.FeedParserDict, None]:
     async with aiohttp.ClientSession() as session:
         async with session.get(BASE.format(series)) as resp:
             if resp.status > 299:
@@ -54,9 +56,7 @@ class JNovelCog(
     async def cog_unload(self) -> None:
         self.j_novel.cancel()
 
-    @discord.app_commands.command(
-        description="Add a J-Novel series to follow and post to a channel."
-    )
+    @discord.app_commands.command(description="Add a J-Novel series to follow and post to a channel.")
     @discord.app_commands.describe(
         series="The series to follow.",
         channel="The channel to post to new chapters to.",
@@ -65,29 +65,27 @@ class JNovelCog(
         self,
         interaction: discord.Interaction,
         series: str,
-        channel: discord.TextChannel,
+        channel: Union[discord.Thread, discord.TextChannel],
     ):
         """
         Add a J-Novel series to follow and post to a channel.
         """
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server."
-            )
+            await interaction.response.send_message("This command must be used in a server.")
             return
 
         results = await search_series(series)
 
         if not results:
-            return await interaction.response.send_message(
-                "No results found.", ephemeral=True
-            )
+            return await interaction.response.send_message("No results found.", ephemeral=True)
 
         if len(results) == 1:
             result = results[0]
 
             with Session.begin() as db:
-                db_series = db.get(JNovel, result.id)
+                db_series = db.execute(
+                    sa.select(JNovel).filter(JNovel.series == result.id, JNovel.guild_id == interaction.guild.id)
+                ).scalar_one_or_none()
 
                 if db_series is not None:
                     return await interaction.response.send_message(
@@ -104,15 +102,11 @@ class JNovelCog(
                     )
                 )
 
-                await interaction.response.send_message(
-                    f"Added {result.title} to the follow list.", ephemeral=True
-                )
+                await interaction.response.send_message(f"Added {result.title} to the follow list.", ephemeral=True)
         else:
             view = JNovelSearch(results, interaction.user.id, channel)
 
-            await interaction.response.send_message(
-                "Select the series you want to follow.", view=view, ephemeral=True
-            )
+            await interaction.response.send_message("Select the series you want to follow.", view=view, ephemeral=True)
 
     @tasks.loop(seconds=5)
     async def j_novel(self):
@@ -126,10 +120,10 @@ class JNovelCog(
                     guild = self.bot.get_guild(feed.guild_id)
                     if guild is None:
                         break
-                    channel = guild.get_channel(feed.channel_id)
+
+                    channel = await get_channel(guild, feed.channel_id)
+
                     if channel is None:
-                        break
-                    if not isinstance(channel, discord.TextChannel):
                         break
 
                     results = [r async for r in get_latest(feed.series, feed.latest)]
@@ -154,8 +148,8 @@ class JNovelCog(
 
                     if entry is not None:
                         feed.latest = cast(str, entry.id)
-        except Exception:
-            traceback.print_exc()
+        except Exception as e:
+            logger.error("Error in j_novel loop", exc_info=e)
 
 
 async def setup(bot: commands.Bot):

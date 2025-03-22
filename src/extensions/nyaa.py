@@ -1,5 +1,5 @@
-import traceback
-from typing import cast
+import logging
+from typing import Union, cast
 
 import aiohttp
 import discord
@@ -9,16 +9,17 @@ from discord.ext import commands, tasks
 
 from src import Session
 from src.models.database import Nyaa
-from src.utils import search
+from src.utils import get_channel, search
 from src.utils.nyaa import magnet
 from src.views.nyaa import NyaaNotificationView
 
 URL = "https://nyaa.si/?page=rss"
 
 
-async def generate_embed(
-    entry: feedparser.FeedParserDict, given_title: str
-) -> discord.Embed:
+logger = logging.getLogger(__name__)
+
+
+async def generate_embed(entry: feedparser.FeedParserDict, given_title: str) -> discord.Embed:
     """
     Generates a discord embed for a nyaa torrent.
     """
@@ -47,9 +48,7 @@ Magnet Link (Copy paste):
     return embed
 
 
-def get_latest(
-    feed, name: str, latest: str | None = None
-) -> list[feedparser.FeedParserDict]:
+def get_latest(feed, name: str, latest: str | None = None) -> list[feedparser.FeedParserDict]:
     results = []
 
     for entry in feed.entries:
@@ -84,9 +83,7 @@ class NyaaCog(
     async def cog_unload(self) -> None:
         self.nyaa.cancel()
 
-    @discord.app_commands.command(
-        description="Add a new Nyaa RSS feed match to the database"
-    )
+    @discord.app_commands.command(description="Add a new Nyaa RSS feed match to the database")
     @discord.app_commands.describe(
         name="The name of the RSS feed (used for identifying the feed)",
         match="The value to match the RSS feed title against (use what you would search on Nyaa.si)",
@@ -97,22 +94,18 @@ class NyaaCog(
         interaction: discord.Interaction,
         name: str,
         match: str,
-        channel: discord.TextChannel,
+        channel: Union[discord.Thread, discord.TextChannel],
     ):
         """Add a new RSS feed to the database. This will not start the feed."""
         name = name.lower()
 
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
             return
 
         with Session.begin() as session:
             nyaa = session.execute(
-                sa.select(Nyaa).filter(
-                    Nyaa.name == name, Nyaa.guild_id == interaction.guild.id
-                )
+                sa.select(Nyaa).filter(Nyaa.name == name, Nyaa.guild_id == interaction.guild.id)
             ).scalar_one_or_none()
 
             if nyaa:
@@ -122,9 +115,7 @@ class NyaaCog(
                 return
 
             nyaa = session.execute(
-                sa.select(Nyaa).filter(
-                    Nyaa.match == match, Nyaa.guild_id == interaction.guild.id
-                )
+                sa.select(Nyaa).filter(Nyaa.match == match, Nyaa.guild_id == interaction.guild.id)
             ).scalar_one_or_none()
 
             if nyaa:
@@ -153,36 +144,21 @@ class NyaaCog(
         """Remove an RSS feed from the database. This will stop the feed."""
         name = name.lower()
 
-        if (
-            interaction.guild is None
-            or interaction.channel is None
-            or not isinstance(interaction.user, discord.Member)
-        ):
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
+        if interaction.guild is None or interaction.channel is None or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
             return
 
         with Session.begin() as session:
             rss = session.execute(
-                sa.select(Nyaa).filter(
-                    Nyaa.name == name, Nyaa.guild_id == interaction.guild.id
-                )
+                sa.select(Nyaa).filter(Nyaa.name == name, Nyaa.guild_id == interaction.guild.id)
             ).scalar_one_or_none()
 
             if not rss:
-                await interaction.response.send_message(
-                    "RSS feed does not exist", ephemeral=True
-                )
+                await interaction.response.send_message("RSS feed does not exist", ephemeral=True)
                 return
 
-            if (
-                not rss.creator_id == interaction.user.id
-                and not interaction.user.guild_permissions.manage_guild
-            ):
-                await interaction.response.send_message(
-                    "You are not the creator of this RSS feed", ephemeral=True
-                )
+            if not rss.creator_id == interaction.user.id and not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message("You are not the creator of this RSS feed", ephemeral=True)
                 return
 
             for follower in rss.followers:
@@ -195,19 +171,11 @@ class NyaaCog(
     async def list(self, interaction: discord.Interaction):
         """List all RSS feeds."""
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
             return
 
         with Session.begin() as session:
-            feeds = (
-                session.execute(
-                    sa.select(Nyaa).filter(Nyaa.guild_id == interaction.guild.id)
-                )
-                .scalars()
-                .all()
-            )
+            feeds = session.execute(sa.select(Nyaa).filter(Nyaa.guild_id == interaction.guild.id)).scalars().all()
 
             if not feeds:
                 await interaction.response.send_message("No RSS feeds found")
@@ -215,18 +183,12 @@ class NyaaCog(
 
             msg = "\n".join(f"**{feed.name}**: `{feed.match}`" for feed in feeds)
 
-            await interaction.response.send_message(
-                f"RSS feeds (**name**: `match`):\n{msg}"
-            )
+            await interaction.response.send_message(f"RSS feeds (**name**: `match`):\n{msg}")
 
-    @discord.app_commands.command(
-        description="Get notifications when a new seed matching a regex is posted."
-    )
+    @discord.app_commands.command(description="Get notifications when a new seed matching a regex is posted.")
     async def notifications(self, interaction: discord.Interaction):
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server."
-            )
+            await interaction.response.send_message("This command must be used in a server.")
             return
 
         with Session(expire_on_commit=False) as db:
@@ -240,9 +202,7 @@ class NyaaCog(
             view=view,
         )
 
-    async def post(
-        self, nyaa: Nyaa, channel: discord.TextChannel, entry: feedparser.FeedParserDict
-    ):
+    async def post(self, nyaa: Nyaa, channel: discord.TextChannel | discord.Thread, entry: feedparser.FeedParserDict):
         embed = await generate_embed(entry, nyaa.name)
         role = discord.utils.get(channel.guild.roles, name="Nyaa Seed Updates")
 
@@ -265,9 +225,7 @@ class NyaaCog(
 
             await member.add_roles(role)
 
-        await channel.send(
-            f"{role.mention} New seed has been posted for {nyaa.name}", embed=embed
-        )
+        await channel.send(f"{role.mention} New seed has been posted for {nyaa.name}", embed=embed)
 
     @tasks.loop(seconds=5)
     async def nyaa(self):
@@ -292,23 +250,21 @@ class NyaaCog(
                     guild = self.bot.get_guild(nyaa_match.guild_id)
                     if guild is None:
                         continue
-                    channel = guild.get_channel(nyaa_match.channel_id)
+
+                    channel = await get_channel(guild, nyaa_match.channel_id)
+
                     if channel is None:
-                        continue
-                    if not isinstance(channel, discord.TextChannel):
                         continue
 
                     entry = None
 
-                    for entry in reversed(
-                        get_latest(data, nyaa_match.match, nyaa_match.latest)
-                    ):
+                    for entry in reversed(get_latest(data, nyaa_match.match, nyaa_match.latest)):
                         await self.post(nyaa_match, channel, entry)
 
                     if entry is not None:
                         nyaa_match.latest = cast(str, entry.id)
-        except Exception:
-            traceback.print_exc()
+        except Exception as e:
+            logger.error("Error in nyaa loop", exc_info=e)
 
 
 async def setup(bot: commands.Bot) -> None:

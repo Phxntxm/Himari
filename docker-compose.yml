@@ -1,0 +1,30 @@
+services:
+  bot:
+    image: ${ECR_URL}/himari/bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: bridge
+    links:
+      - himaridb
+    depends_on:
+      himaridb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://himari:himari@himaridb:5432/himari
+  himaridb:
+    network_mode: bridge
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: himari
+      POSTGRES_PASSWORD: himari
+      POSTGRES_DB: himari
+    ports:
+      - "5432:5432"
+    volumes:
+      - /root/data/himari/:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U himari"]
+      interval: 1s
+      timeout: 5s
+      retries: 5

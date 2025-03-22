@@ -1,0 +1,5 @@
+FROM postgres:17
+ENV POSTGRES_USER=himari
+ENV POSTGRES_PASSWORD=himari
+ENV POSTGRES_DB=himari
+CMD ["docker-entrypoint.sh", "postgres"]

@@ -49,9 +49,7 @@ async def search_manga(search: str) -> list[MangadexManga]:
 
         attrs = manga["attributes"]
         title = attrs["title"].get("en") or next(iter(attrs["title"].values()))
-        description = attrs["description"].get("en") or next(
-            iter(attrs["description"].values()), None
-        )
+        description = attrs["description"].get("en") or next(iter(attrs["description"].values()), None)
 
         mangas.append(
             MangadexManga(
@@ -76,16 +74,14 @@ async def latest_chapter(id: str) -> Chapter | None:
                 "translatedLanguage[]": "en",
                 "order[volume]": "desc",
                 "order[chapter]": "desc",
+                "order[publishAt]": "desc",
             },
         )
 
         data = await res.json()
 
     for chapter in data["data"]:
-        if (
-            chapter["type"] == "chapter"
-            and chapter["attributes"]["translatedLanguage"] == "en"
-        ):
+        if chapter["type"] == "chapter" and chapter["attributes"]["translatedLanguage"] == "en":
             return Chapter(
                 id=chapter["id"],
                 title=chapter["attributes"]["title"],

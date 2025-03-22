@@ -19,7 +19,7 @@ async def _get_series(session: aiohttp.ClientSession, *, page=0) -> dict | None:
     limit = 100
 
     async with session.get(
-        f"{BASE_URL}/app/v1/series",
+        f"{BASE_URL}/app/v2/series",
         params={"format": "json", "skip": page * limit, "limit": limit},
     ) as resp:
         if resp.status > 299:

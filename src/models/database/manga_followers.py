@@ -14,6 +14,6 @@ class MangaFollower(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(nullable=False)
-    manga_id: Mapped[str] = mapped_column(ForeignKey("manga.id"), nullable=False)
+    manga_id: Mapped[int] = mapped_column(ForeignKey("manga.id"), nullable=False)
 
     manga: Mapped["Manga"] = relationship("Manga", back_populates="followers")

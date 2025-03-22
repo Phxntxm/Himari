@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import typing
 
 import discord
@@ -15,20 +16,13 @@ class MangaSelection(discord.ui.Select):
         self._channel = channel
         self.mangas = mangas
 
-        options = [
-            discord.SelectOption(label=manga.title[:90], value=manga.id)
-            for manga in mangas
-        ]
+        options = [discord.SelectOption(label=manga.title[:90], value=manga.id) for manga in mangas]
 
-        super().__init__(
-            placeholder="Manga", min_values=1, max_values=1, options=options
-        )
+        super().__init__(placeholder="Manga", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
             return
 
         _uuid = self.values[0]
@@ -38,13 +32,11 @@ class MangaSelection(discord.ui.Select):
 
         with Session.begin() as db:
             db_manga = db.execute(
-                sa.select(Manga).filter(Manga.mangadex_id == manga.id)
+                sa.select(Manga).filter(Manga.mangadex_id == manga.id, Manga.guild_id == interaction.guild.id)
             ).scalar_one_or_none()
 
             if db_manga is not None:
-                await interaction.response.send_message(
-                    "That manga is already in the list.", ephemeral=True
-                )
+                await interaction.response.send_message("That manga is already in the list.", ephemeral=True)
                 return
 
             db.add(
@@ -82,9 +74,7 @@ class MangaSearch(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self._owner:
-            await interaction.response.send_message(
-                "You cannot use this command.", ephemeral=True
-            )
+            await interaction.response.send_message("You cannot use this command.", ephemeral=True)
             return False
 
         return True
@@ -101,14 +91,9 @@ def determine_followers(mangas: list[Manga], user_id: int) -> dict[Manga, bool]:
                 followers[manga] = False
                 continue
 
-            follower = next(
-                filter(lambda f: f.user_id == user_id, db_manga.followers), None
-            )
+            follower = next(filter(lambda f: f.user_id == user_id, db_manga.followers), None)
 
-            if follower is None:
-                followers[manga] = False
-            else:
-                followers[manga] = True
+            followers[manga] = follower is not None
 
     return followers
 
@@ -138,10 +123,7 @@ class MangaNotification(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.guild is None or interaction.channel is None:
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
-            return
+            return await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
 
         await interaction.response.defer()
 
@@ -161,9 +143,7 @@ class MangaNotification(discord.ui.Select):
                 manga = db.get(Manga, option)
                 assert manga is not None
 
-                follower = next(
-                    filter(lambda f: f.user_id == self._owner, manga.followers), None
-                )
+                follower = next(filter(lambda f: f.user_id == self._owner, manga.followers), None)
                 assert follower is not None
 
                 db.delete(follower)
@@ -224,7 +204,15 @@ class MangaNotificationView(discord.ui.View):
 
     @property
     def last_page(self) -> int:
-        return max(int(len(self._mangas) / self._max), 1)
+        # Just so I can do comments and make it clear this is split out.
+        # First convert to float so we can precision
+        total_mangas = float(len(self._mangas))
+        # Divide by the max amount of items per page
+        pages = total_mangas / self._max
+        # Round up to the nearest whole number
+        pages = math.ceil(pages)
+        # Ensure it's at least 1
+        return max(pages, 1)
 
     def next(self):
         self._page += 1
@@ -256,9 +244,7 @@ class MangaNotificationView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self._owner:
-            await interaction.response.send_message(
-                "You cannot use this command.", ephemeral=True
-            )
+            await interaction.response.send_message("You cannot use this command.", ephemeral=True)
             return False
 
         return True
